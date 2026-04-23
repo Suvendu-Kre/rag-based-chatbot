@@ -1,8 +1,16 @@
+import os
+import logging
+from typing import List, Dict, Any
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, AIMessage
-import os
-from typing import List
+from sentence_transformers import SentenceTransformer
+import faiss
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+import hashlib as _hl
+import re as _re
+import numpy as np
 
 class Agent:
     def __init__(self):
@@ -15,10 +23,10 @@ class Agent:
 
 Your task is to design, explain, and generate complete RAG-based chatbot systems using the following mandatory components:
 
-* Sentence-based chunking (semantic-aware splitting preferred)
-* BGE-M3 embeddings (multi-lingual, dense + sparse support)
-* FAISS index (for fast in-memory similarity search)
-* Qdrant DB (as the primary persistent vector database)
+*   Sentence-based chunking (semantic-aware splitting preferred)
+*   BGE-M3 embeddings (multi-lingual, dense + sparse support)
+*   FAISS index (for fast in-memory similarity search)
+*   Qdrant DB (as the primary persistent vector database)
 
 ---
 
@@ -28,9 +36,9 @@ When given any input (documents, URLs, raw text, or use-case description), you M
 
 ### 1. Understand the Use Case
 
-* Identify domain (e.g., legal, chatbot, docs QA, support bot)
-* Determine scale (small / medium / large dataset)
-* Identify latency vs accuracy tradeoffs
+*   Identify domain (e.g., legal, chatbot, docs QA, support bot)
+*   Determine scale (small / medium / large dataset)
+*   Identify latency vs accuracy tradeoffs
 
 ---
 
@@ -38,46 +46,46 @@ When given any input (documents, URLs, raw text, or use-case description), you M
 
 You MUST always structure the pipeline as:
 
-1. Data Ingestion
-2. Text Preprocessing
-3. Sentence Chunking
-4. Embedding Generation (BGE-M3)
-5. Dual Indexing:
+1.  Data Ingestion
+2.  Text Preprocessing
+3.  Sentence Chunking
+4.  Embedding Generation (BGE-M3)
+5.  Dual Indexing:
 
-   * FAISS (local fast retrieval)
-   * Qdrant (persistent + scalable retrieval)
-6. Query Pipeline:
+    *   FAISS (local fast retrieval)
+    *   Qdrant (persistent + scalable retrieval)
+6.  Query Pipeline:
 
-   * Query embedding
-   * Hybrid retrieval (FAISS + Qdrant or fallback strategy)
-7. Context Re-ranking (optional but recommended)
-8. LLM Generation Layer
-9. Response Formatting
+    *   Query embedding
+    *   Hybrid retrieval (FAISS + Qdrant or fallback strategy)
+7.  Context Re-ranking (optional but recommended)
+8.  LLM Generation Layer
+9.  Response Formatting
 
 ---
 
 ### 3. Chunking Rules (STRICT)
 
-* Use sentence-level splitting (not naive token splitting)
-* Maintain semantic coherence
-* Recommended:
+*   Use sentence-level splitting (not naive token splitting)
+*   Maintain semantic coherence
+*   Recommended:
 
-  * Chunk size: 200–500 tokens
-  * Overlap: 20–50 tokens
-
-Explain WHY you chose these values.
+    *   Chunk size: 200–500 tokens
+    *   Overlap: 20–50 tokens
+*   **Chunking Design Decision:** Explain WHY you chose these values, considering the specific characteristics of the input data, the limitations of the LLM, and the domain of the data.
 
 ---
 
 ### 4. Embedding Rules
 
-* Use **BGE-M3**
-* Mention:
+*   Use **BGE-M3**
+*   Mention:
 
-  * dense vectors
-  * sparse vectors (if hybrid search used)
-* Normalize embeddings if needed
-* Explain embedding dimensionality and impact
+    *   dense vectors
+    *   sparse vectors (if hybrid search used)
+*   Normalize embeddings if needed
+*   Explain embedding dimensionality and impact
+*   **Embedding Design Decision:** Rationale for using BGE-M3, including the specific model variant (if applicable), and considerations for dense vs. sparse vectors. Explain the dimensionality of the chosen embedding model and how it impacts performance and storage.
 
 ---
 
@@ -87,17 +95,20 @@ You MUST explain:
 
 #### FAISS:
 
-* Type (Flat, IVF, HNSW)
-* Why chosen (speed vs accuracy)
+*   Type (Flat, IVF, HNSW)
+*   Why chosen (speed vs accuracy)
+*   How `faiss-gpu` can be utilized for acceleration.
 
 #### Qdrant:
 
-* Collection schema
-* Vector config
-* Payload structure
-* Filtering capability
+*   Collection schema
+*   Vector config
+*   Payload structure
+*   Filtering capability
+*   Explain how Qdrant's built-in scaling capabilities can handle large datasets.
 
 Explain how FAISS and Qdrant complement each other.
+*   **Indexing Design Decision:** Justification for the FAISS index type (e.g., Flat, IVF, HNSW) and the Qdrant collection schema, vector configuration, and payload structure. Explain how FAISS and Qdrant are used together, highlighting their respective strengths in the pipeline.
 
 ---
 
@@ -105,13 +116,14 @@ Explain how FAISS and Qdrant complement each other.
 
 You MUST include one of:
 
-* Hybrid retrieval (dense + sparse)
-* OR dual-stage retrieval:
+*   Hybrid retrieval (dense + sparse)
+*   OR dual-stage retrieval:
 
-  * FAISS (fast shortlist)
-  * Qdrant (refined search)
+    *   FAISS (fast shortlist)
+    *   Qdrant (refined search)
 
 Explain trade-offs clearly.
+*   **Retrieval Design Decision:** Why a specific retrieval strategy (hybrid or dual-stage) was selected and the trade-offs involved. Justify the choice based on factors like latency requirements, accuracy needs, and the characteristics of the data.
 
 ---
 
@@ -119,17 +131,17 @@ Explain trade-offs clearly.
 
 Always generate:
 
-* Python code using:
+*   Python code using:
 
-  * sentence-transformers or HuggingFace (for BGE-M3)
-  * faiss
-  * qdrant-client
-* Modular structure:
+    *   `sentence-transformers` or `HuggingFace` (for BGE-M3)
+    *   `faiss`
+    *   `qdrant-client`
+*   Modular structure:
 
-  * ingestion.py
-  * embedding.py
-  * index.py
-  * query.py
+    *   `ingestion.py` (Example: Use `BeautifulSoup` for web scraping, `PyPDF2` for PDF parsing)
+    *   `embedding.py`
+    *   `index.py`
+    *   `query.py`
 
 ---
 
@@ -155,36 +167,36 @@ Your response MUST contain:
 
 Include:
 
-* batching embeddings
-* caching queries
-* async retrieval
-* GPU vs CPU tradeoffs
+*   batching embeddings
+*   caching queries
+*   async retrieval
+*   GPU vs CPU tradeoffs
 
 ---
 
 ### 10. Tone & Style
 
-* Clear, structured, developer-friendly
-* Avoid unnecessary theory
-* Focus on practical implementation
+*   Clear, structured, developer-friendly
+*   Avoid unnecessary theory
+*   Focus on practical implementation
 
 ---
 
 ## 🚫 Constraints
 
-* DO NOT skip FAISS or Qdrant
-* DO NOT use naive chunking
-* DO NOT give vague answers
-* ALWAYS justify design decisions
+*   DO NOT skip FAISS or Qdrant
+*   DO NOT use naive chunking
+*   DO NOT give vague answers
+*   ALWAYS justify design decisions
 
 ---
 
 ## 🧪 Example Inputs You Should Handle
 
-* "Build a chatbot for PDF documents"
-* "Create a legal RAG system"
-* "Optimize RAG for low latency"
-* "Explain FAISS vs Qdrant in this pipeline"
+*   "Build a chatbot for PDF documents"
+*   "Create a legal RAG system"
+*   "Optimize RAG for low latency"
+*   "Explain FAISS vs Qdrant in this pipeline"
 
 ---
 
@@ -194,7 +206,14 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
 """
         self._faiss_index = None
         self._faiss_docs: list = []
-        self._embedder = None
+        self._embedder = SentenceTransformer('BAAI/bge-m3')
+        self._qdrant_client = QdrantClient(url=os.environ.get('QDRANT_URL', 'http://localhost:6333'), api_key=os.environ.get('QDRANT_API_KEY', ''))
+        self._COL = 'knowledge_base'
+        if self._COL not in [c.name for c in self._qdrant_client.get_collections().collections]:
+            self._qdrant_client.create_collection(
+                collection_name=self._COL,
+                vectors_config=VectorParams(size=768, distance=Distance.COSINE)  # BGE-M3 default dim
+            )
 
     def _get_tools(self):
         from tools.tool_manager import get_tools
@@ -216,20 +235,16 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
             # Execute each tool call and feed results back
             for tc in response.tool_calls:
                 fn = self.tools_map.get(tc["name"])
-                tool_result = fn.invoke(tc["args"]) if fn else f"Unknown tool: {tc['name']}"
-                messages.append(ToolMessage(content=str(tool_result), tool_call_id=tc["id"]))
-                self._ingest_to_rag(message, str(tool_result), tc["name"])
-
+                result = fn.invoke(tc["args"]) if fn else f"Unknown tool: {tc['name']}"
+                messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+                self._ingest_to_rag(message, str(result), tc["name"]) # Ingest after tool call
         return response.content if hasattr(response, "content") else str(response)
 
     def _ingest_to_rag(self, query: str, mcp_result: str, tool_name: str = 'mcp_tool') -> None:
         """Ingest MCP-fetched data using BGE-M3, FAISS, Qdrant as specified in the system prompt."""
         try:
-            import os
-            from datetime import datetime
             text = f'Tool: {tool_name}\nQuery: {query}\nResult: {mcp_result}'
-                # Sentence-level chunking: split text into sentences, group into ~300-token chunks
-            import re as _re
+            # Sentence-level chunking: split text into sentences, group into ~300-token chunks
             sentences = _re.split(r'(?<=[.!?])\s+', text)
             chunk_size, overlap, chunks, current = 300, 50, [], []
             for s in sentences:
@@ -239,12 +254,8 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
                     current = current[-overlap:] if overlap else []
             if current:
                 chunks.append(' '.join(current))
-            from sentence_transformers import SentenceTransformer
-            if self._embedder is None:
-                self._embedder = SentenceTransformer('BAAI/bge-m3')
             embeddings = self._embedder.encode(chunks, normalize_embeddings=True).tolist()
             # FAISS: build/update in-memory index for fast local retrieval
-            import faiss, numpy as np
             vecs = np.array(embeddings, dtype='float32')
             if not hasattr(self, '_faiss_index') or self._faiss_index is None:
                 self._faiss_index = faiss.IndexFlatIP(vecs.shape[1])  # inner-product (cosine after normalise)
@@ -252,15 +263,6 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
             self._faiss_index.add(vecs)
             self._faiss_docs.extend(chunks)
             # Qdrant: upsert into persistent vector DB
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Distance, VectorParams, PointStruct
-            import hashlib as _hl
-            qdrant_url = os.environ.get('QDRANT_URL', 'http://localhost:6333')
-            qdrant_key = os.environ.get('QDRANT_API_KEY', '')
-            qc = QdrantClient(url=qdrant_url, api_key=qdrant_key or None)
-            _COL = 'knowledge_base'
-            if _COL not in [c.name for c in qc.get_collections().collections]:
-                qc.create_collection(_COL, vectors_config=VectorParams(size=len(embeddings[0]), distance=Distance.COSINE))
             points = [
                 PointStruct(
                     id=int(_hl.md5(f'{tool_name}:{query}:{i}'.encode()).hexdigest()[:8], 16),
@@ -269,58 +271,33 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
                 )
                 for i, chunk in enumerate(chunks)
             ]
-            qc.upsert(collection_name=_COL, points=points)
+            self._qdrant_client.upsert(collection_name=self._COL, points=points)
         except Exception as e:
-            import logging; logging.getLogger(__name__).warning(f'RAG ingestion failed: {e}')
+            logging.getLogger(__name__).warning(f'RAG ingestion failed: {e}')
 
     def _retrieve_from_rag(self, query: str, top_k: int = 5) -> List[str]:
-        """Retrieve relevant chunks from FAISS and Qdrant."""
+        """Retrieve from FAISS (shortlist) and Qdrant (refined)."""
         try:
-            import faiss
-            import numpy as np
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Filter, FieldCondition, Range
-            import os
-            if self._embedder is None:
-                from sentence_transformers import SentenceTransformer
-                self._embedder = SentenceTransformer('BAAI/bge-m3')
-
             query_embedding = self._embedder.encode(query, normalize_embeddings=True)
-            # FAISS retrieval (fast shortlist)
+            # FAISS search (shortlist)
             if self._faiss_index is None:
                 return []
-
-            k_faiss = min(2 * top_k, self._faiss_index.ntotal)  # avoid out-of-bounds
-            distances, indices = self._faiss_index.search(np.array([query_embedding], dtype='float32'), k_faiss)
-            faiss_results = [(self._faiss_docs[i], distances[0][idx]) for idx, i in enumerate(indices[0]) if i < len(self._faiss_docs)]
-
-            # Qdrant retrieval (persistent search)
-            qdrant_url = os.environ.get('QDRANT_URL', 'http://localhost:6333')
-            qdrant_key = os.environ.get('QDRANT_API_KEY', '')
-            qc = QdrantClient(url=qdrant_url, api_key=qdrant_key or None)
-            _COL = 'knowledge_base'
-            qdrant_results = qc.search(
-                collection_name=_COL,
+            D, I = self._faiss_index.search(np.array([query_embedding], dtype='float32'), 2 * top_k)
+            faiss_candidates = [self._faiss_docs[i] for i in I[0]]
+            # Qdrant search (refined)
+            qdrant_results = self._qdrant_client.search(
+                collection_name=self._COL,
                 query_vector=query_embedding.tolist(),
                 limit=top_k,
                 query_filter=None  # Add filters if needed
             )
-            # Combine and re-rank (simple concatenation for now)
-            combined_results = [(r.payload['text'], r.score) for r in qdrant_results]
-            combined_results.extend([(text, -distance) for text, distance in faiss_results]) # Use negative distance as score
+            qdrant_texts = [hit.payload['text'] for hit in qdrant_results]
 
-            # Sort by score and return top_k unique chunks
-            unique_chunks = []
-            seen = set()
-            for chunk, score in sorted(combined_results, key=lambda x: x[1], reverse=True):
-                if chunk not in seen:
-                    unique_chunks.append(chunk)
-                    seen.add(chunk)
-                    if len(unique_chunks) >= top_k:
-                        break
-            return unique_chunks
-
+            # Combine and deduplicate (favor Qdrant)
+            combined_results = list(dict.fromkeys(qdrant_texts + faiss_candidates))
+            return combined_results[:top_k]
         except Exception as e:
-            import logging
             logging.getLogger(__name__).warning(f'RAG retrieval failed: {e}')
             return []
+    async def chat(self, message: str) -> str:
+        return self.run(message)

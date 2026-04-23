@@ -1,10 +1,9 @@
 import time
 import random
 import logging
+from typing import Callable, Any
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-def retry(func, attempts=3, delay=1, exponential_backoff=True):
+def retry(func: Callable[..., Any], attempts: int = 3, delay: int = 1, exponential_backoff: bool = True) -> Callable[..., Any]:
     """Retry a function with exponential backoff."""
     def wrapper(*args, **kwargs):
         attempt = 0
@@ -16,9 +15,7 @@ def retry(func, attempts=3, delay=1, exponential_backoff=True):
                 if attempt == attempts:
                     logging.error(f"Function {func.__name__} failed after {attempts} attempts: {e}")
                     raise
-                sleep_time = delay * (2 ** (attempt - 1) if exponential_backoff else 1) + random.uniform(0, 1)
-                logging.warning(f"Attempt {attempt} failed. Retrying in {sleep_time:.2f} seconds...")
+                sleep_time = delay * (2 ** (attempt - 1) if exponential_backoff else 1) + random.random()
+                logging.warning(f"Retrying {func.__name__} in {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
     return wrapper
-
-# Placeholder for circuit breaker implementation (can be added later)

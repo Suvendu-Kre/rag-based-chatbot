@@ -39,9 +39,8 @@ async def chat(req: ChatRequest):
     global _REQUEST_COUNT
     _REQUEST_COUNT += 1
     session_id = req.session_id or str(uuid.uuid4())
-    # Call your agent's chat method here:
     validated_message = validate_input(req.message)
-    response = agent.run(validated_message)
+    response = await agent.chat(validated_message)
     validated_response = validate_output(response)
     return {"response": validated_response, "session_id": session_id}
 
@@ -51,9 +50,8 @@ async def run(req: RunRequest):
     global _REQUEST_COUNT
     _REQUEST_COUNT += 1
     task_id = str(uuid.uuid4())
-    # Execute the agent task with the provided input and context:
     validated_input = validate_input(req.input)
-    result = agent.run(validated_input)
+    result = await agent.chat(validated_input)
     validated_result = validate_output(result)
     return {"ok": True, "task_id": task_id, "result": validated_result,
             "input": req.input, "completed_at": datetime.utcnow().isoformat() + "Z"}
@@ -62,7 +60,7 @@ async def run(req: RunRequest):
 @process_request
 def info():
     from tools.tool_manager import get_tools
-    tools = [tool.name for tool in get_tools()]
+    tools = [tool.__name__ for tool in get_tools()]
     return {
         "name": _AGENT_NAME,
         "version": _AGENT_VERSION,

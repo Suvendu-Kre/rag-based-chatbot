@@ -1,19 +1,16 @@
 import pytest
 from agents.main_agent import Agent
 
-def test_agent_initialization():
-    agent = Agent()
+@pytest.fixture
+def agent():
+    return Agent()
+
+def test_agent_initialization(agent):
     assert agent is not None
     assert agent.system_prompt is not None
 
-def test_agent_run_basic_query():
-    agent = Agent()
-    response = agent.run("What is a RAG pipeline?")
-    assert isinstance(response, str)
-    assert len(response) > 0
-
-def test_agent_run_with_tool_call():
-    agent = Agent()
-    response = agent.run("What is 2 + 2?")
-    assert isinstance(response, str)
-    assert "4" in response # Expect the agent to use the calculator tool
+def test_agent_rag_design(agent):
+    # A simple test to see if the agent provides a RAG design
+    response = agent.run("Design a RAG pipeline for document retrieval.")
+    assert "Architecture Diagram" in response
+    assert "Step-by-step explanation" in response

@@ -1,23 +1,26 @@
+import time
 import logging
 from functools import wraps
 from typing import Callable, Any
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 def process_request(func: Callable[..., Any]) -> Callable[..., Any]:
     """
-    Decorator for logging request details and any exceptions that occur.
-    This version is FastAPI-safe and supports async handlers.
+    Decorator for logging request information.
     """
     @wraps(func)
     async def wrapper(*args, **kwargs):
+        start_time = time.time()
         try:
-            logging.info(f"Request received for: {func.__name__}")
-            result = await func(*args, **kwargs)
-            logging.info(f"Request completed for: {func.__name__}")
-            return result
+            response = await func(*args, **kwargs)
+            status_code = 200  # Assume success if no exception
+            return response
         except Exception as e:
-            logging.error(f"Exception in {func.__name__}: {e}", exc_info=True)
-            raise  # Re-raise the exception after logging
+            logging.error(f"Error in {func.__name__}: {e}")
+            status_code = 500  # Internal Server Error
+            raise
+        finally:
+            duration = time.time() - start_time
+            logging.info(
+                f"Request to {func.__name__} took {duration:.4f}s and returned status code {status_code}"
+            )
     return wrapper
