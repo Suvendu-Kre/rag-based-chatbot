@@ -1,6 +1,6 @@
 agent_name: Agent
 agentic_framework: langchain
-llm_provider: google_vertexai
+llm_provider: vertexai
 model: gemini-2.0-flash-001
 security:
   auth_type: api_key
@@ -17,10 +17,7 @@ error_handling:
   timeout: 30
   circuit_breaker: false
 observability:
-  logging_level: INFO
+  explainability: true
 deployment:
   platform: gcp
   region: us-central1
-memory:
-  enabled: false
-  type: conversation_history

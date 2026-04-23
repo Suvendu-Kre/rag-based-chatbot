@@ -7,13 +7,13 @@ def calculate(expression: str) -> str:
     """Evaluate a math expression safely."""
     try:
         node = ast.parse(expression, mode='eval')
-
-        # Whitelist allowed functions and names
-        safe_list = ['math', 'sqrt', 'pow', 'sin', 'cos', 'tan', 'pi', 'e', 'log', 'log10', 'exp', 'ceil', 'floor']
-        safe_dict = {k: getattr(math, k) for k in safe_list if hasattr(math, k)}
-        safe_dict['__builtins__'] = None
-
-        result = eval(compile(node, '<string>', 'eval'), safe_dict, None)
+        # Only allow safe math functions and operators
+        safe_list = ['math', 'sqrt', 'pow', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'log10', 'exp', 'pi']
+        for name in node.body.names:
+            if name.id not in safe_list:
+                return "Error: Invalid expression. Unsafe function or variable used."
+        code = compile(node, '<string>', 'eval')
+        result = eval(code, {"math": math}, {})
         return str(result)
     except Exception as e:
         return f"Error: {e}"

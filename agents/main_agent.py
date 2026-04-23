@@ -190,7 +190,8 @@ Include:
 
 ## 🏁 Goal
 
-Produce a **production-ready, scalable, and optimized RAG system design + implementation** every time."""
+Produce a **production-ready, scalable, and optimized RAG system design + implementation** every time.
+"""
         self._faiss_index = None
         self._faiss_docs: list = []
         self._embedder = None
@@ -203,26 +204,22 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
         retrieved_chunks = self._retrieve_from_rag(message)
         context = "\n".join(retrieved_chunks)
         messages = [
-            SystemMessage(content=self.system_prompt + f"\n\nRetrieved Context:\n{context}"),
+            SystemMessage(content=self.system_prompt + f"\n\nContext from RAG:\n{context}"),
             HumanMessage(content=message),
         ]
         # Agentic loop: keep calling LLM until no more tool calls
         for _ in range(3):  # max iterations to prevent infinite loops
-            try:
-                response = self.llm_with_tools.invoke(messages)
-                messages.append(response)
-                if not response.tool_calls:
-                    break
-                # Execute each tool call and feed results back
-                for tc in response.tool_calls:
-                    fn = self.tools_map.get(tc["name"])
-                    result = fn.invoke(tc["args"]) if fn else f"Unknown tool: {tc['name']}"
-                    messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
-                    self._ingest_to_rag(message, str(result), tc["name"]) # Ingest tool results
-            except Exception as e:
-                import logging
-                logging.exception("LLM call failed")
-                return f"Error: Failed to generate response from LLM: {e}"
+            response = self.llm_with_tools.invoke(messages)
+            messages.append(response)
+            if not response.tool_calls:
+                break
+            # Execute each tool call and feed results back
+            for tc in response.tool_calls:
+                fn = self.tools_map.get(tc["name"])
+                tool_result = fn.invoke(tc["args"]) if fn else f"Unknown tool: {tc['name']}"
+                messages.append(ToolMessage(content=str(tool_result), tool_call_id=tc["id"]))
+                self._ingest_to_rag(message, str(tool_result), tc["name"])
+
         return response.content if hasattr(response, "content") else str(response)
 
     def _ingest_to_rag(self, query: str, mcp_result: str, tool_name: str = 'mcp_tool') -> None:
@@ -279,48 +276,51 @@ Produce a **production-ready, scalable, and optimized RAG system design + implem
     def _retrieve_from_rag(self, query: str, top_k: int = 5) -> List[str]:
         """Retrieve relevant chunks from FAISS and Qdrant."""
         try:
-            from sentence_transformers import SentenceTransformer
-            import faiss, numpy as np
+            import faiss
+            import numpy as np
             from qdrant_client import QdrantClient
             from qdrant_client.models import Filter, FieldCondition, Range
             import os
-
             if self._embedder is None:
+                from sentence_transformers import SentenceTransformer
                 self._embedder = SentenceTransformer('BAAI/bge-m3')
 
             query_embedding = self._embedder.encode(query, normalize_embeddings=True)
-            query_embedding = np.array([query_embedding]).astype('float32')
-
             # FAISS retrieval (fast shortlist)
             if self._faiss_index is None:
                 return []
 
-            D, I = self._faiss_index.search(query_embedding, 2 * top_k)  # Search top 2*k for shortlist
-            faiss_shortlist_indices = I[0].tolist()
-            faiss_shortlist = [self._faiss_docs[i] for i in faiss_shortlist_indices if i < len(self._faiss_docs)]
+            k_faiss = min(2 * top_k, self._faiss_index.ntotal)  # avoid out-of-bounds
+            distances, indices = self._faiss_index.search(np.array([query_embedding], dtype='float32'), k_faiss)
+            faiss_results = [(self._faiss_docs[i], distances[0][idx]) for idx, i in enumerate(indices[0]) if i < len(self._faiss_docs)]
 
-            # Qdrant retrieval (refined search)
+            # Qdrant retrieval (persistent search)
             qdrant_url = os.environ.get('QDRANT_URL', 'http://localhost:6333')
             qdrant_key = os.environ.get('QDRANT_API_KEY', '')
             qc = QdrantClient(url=qdrant_url, api_key=qdrant_key or None)
             _COL = 'knowledge_base'
-
             qdrant_results = qc.search(
                 collection_name=_COL,
-                query_vector=query_embedding[0].tolist(),
+                query_vector=query_embedding.tolist(),
                 limit=top_k,
-                # Add filter if needed, e.g., to filter by tool:
-                # filters=[Filter(must=[FieldCondition(key="tool", match=MatchValue(value="my_tool"))])]
+                query_filter=None  # Add filters if needed
             )
+            # Combine and re-rank (simple concatenation for now)
+            combined_results = [(r.payload['text'], r.score) for r in qdrant_results]
+            combined_results.extend([(text, -distance) for text, distance in faiss_results]) # Use negative distance as score
 
-            qdrant_chunks = [hit.payload['text'] for hit in qdrant_results]
-
-            # Combine and deduplicate (Qdrant results preferred)
-            combined_chunks = list(dict.fromkeys(qdrant_chunks + faiss_shortlist))  # Preserve order, Qdrant first
-
-            return combined_chunks[:top_k]  # Return top_k
+            # Sort by score and return top_k unique chunks
+            unique_chunks = []
+            seen = set()
+            for chunk, score in sorted(combined_results, key=lambda x: x[1], reverse=True):
+                if chunk not in seen:
+                    unique_chunks.append(chunk)
+                    seen.add(chunk)
+                    if len(unique_chunks) >= top_k:
+                        break
+            return unique_chunks
 
         except Exception as e:
             import logging
-            logging.exception("RAG retrieval failed")
+            logging.getLogger(__name__).warning(f'RAG retrieval failed: {e}')
             return []

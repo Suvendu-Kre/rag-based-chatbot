@@ -9,18 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v3
-        with:
-          python-version: "3.10"
-      - name: Install dependencies
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
       - name: Deploy to GCP (Placeholder)
         run: |
           echo "Deploying to GCP..."
-          # Add your GCP deployment script or commands here
+          # Add your GCP deployment steps here, e.g., using gcloud CLI
+          # gcloud functions deploy ...
           echo "Deployment complete."

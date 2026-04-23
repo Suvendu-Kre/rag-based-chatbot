@@ -5,13 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from agents.main_agent import Agent
-from guardrails.safety import validate_input, validate_output
 from observability.monitoring import process_request
-from error_handling.handler import retry
+from guardrails.safety import validate_input, validate_output
 
 _START_TIME = time.time()
 _REQUEST_COUNT = 0
-_AGENT_NAME = "RAG Architect Agent"  # replace with actual agent name
+_AGENT_NAME = "Agent"  # replace with actual agent name
 _AGENT_VERSION = "1.0.0"
 
 app = FastAPI(title=_AGENT_NAME)
@@ -29,7 +28,8 @@ class RunRequest(BaseModel):
     context: Optional[Dict[str, Any]] = {}
 
 @app.get("/health")
-def health():
+@process_request
+async def health():
     return {"status": "ok", "agent": _AGENT_NAME, "version": _AGENT_VERSION,
             "timestamp": datetime.utcnow().isoformat() + "Z"}
 
@@ -39,10 +39,8 @@ async def chat(req: ChatRequest):
     global _REQUEST_COUNT
     _REQUEST_COUNT += 1
     session_id = req.session_id or str(uuid.uuid4())
-    validated_message = validate_input(req.message)
-    if "Error:" in validated_message:
-        return {"response": validated_message, "session_id": session_id}
     # Call your agent's chat method here:
+    validated_message = validate_input(req.message)
     response = agent.run(validated_message)
     validated_response = validate_output(response)
     return {"response": validated_response, "session_id": session_id}
@@ -53,24 +51,24 @@ async def run(req: RunRequest):
     global _REQUEST_COUNT
     _REQUEST_COUNT += 1
     task_id = str(uuid.uuid4())
-    validated_input = validate_input(req.input)
-    if "Error:" in validated_input:
-        return {"ok": False, "task_id": task_id, "result": validated_input,
-                "input": req.input, "completed_at": datetime.utcnow().isoformat() + "Z"}
     # Execute the agent task with the provided input and context:
+    validated_input = validate_input(req.input)
     result = agent.run(validated_input)
     validated_result = validate_output(result)
     return {"ok": True, "task_id": task_id, "result": validated_result,
             "input": req.input, "completed_at": datetime.utcnow().isoformat() + "Z"}
 
 @app.get("/info")
+@process_request
 def info():
+    from tools.tool_manager import get_tools
+    tools = [tool.name for tool in get_tools()]
     return {
         "name": _AGENT_NAME,
         "version": _AGENT_VERSION,
-        "description": "AI agent specialized in designing and generating production-ready Retrieval-Augmented Generation (RAG) pipelines.",
-        "capabilities": ["rag_design", "code_generation"],
-        "tools": ["calculate"],   # populate with real tool names from tool_manager
+        "description": "AI agent powered by the KRE platform",
+        "capabilities": ["chat", "task_execution", "rag", "tool_use"],
+        "tools": tools,
         "endpoints": [
             {"method": "GET",  "path": "/health", "description": "Liveness check"},
             {"method": "POST", "path": "/chat",   "description": "Chat with the agent"},
@@ -82,6 +80,7 @@ def info():
     }
 
 @app.get("/status")
+@process_request
 def status():
     uptime = time.time() - _START_TIME
     try:
