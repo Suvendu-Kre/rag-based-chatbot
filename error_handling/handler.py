@@ -3,19 +3,30 @@ import random
 import logging
 from typing import Callable, Any
 
-def retry(func: Callable[..., Any], attempts: int = 3, delay: int = 1, exponential_backoff: bool = True) -> Callable[..., Any]:
-    """Retry a function with exponential backoff."""
-    def wrapper(*args, **kwargs):
-        attempt = 0
-        while attempt < attempts:
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                attempt += 1
-                if attempt == attempts:
-                    logging.error(f"Function {func.__name__} failed after {attempts} attempts: {e}")
-                    raise
-                sleep_time = delay * (2 ** (attempt - 1) if exponential_backoff else 1) + random.random()
-                logging.warning(f"Retrying {func.__name__} in {sleep_time:.2f} seconds...")
-                time.sleep(sleep_time)
-    return wrapper
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+def retry(func: Callable, attempts: int = 3, delay: float = 1.0, exponential_backoff: bool = True) -> Any:
+    """
+    Retry a function with exponential backoff.
+
+    Args:
+        func: The function to retry.
+        attempts: The maximum number of attempts.
+        delay: The initial delay in seconds.
+        exponential_backoff: Whether to use exponential backoff.
+
+    Returns:
+        The result of the function if successful, or None if all attempts fail.
+    """
+    for attempt in range(attempts):
+        try:
+            return func()
+        except Exception as e:
+            logging.warning(f"Attempt {attempt + 1} failed: {e}")
+            if attempt == attempts - 1:
+                logging.error(f"All {attempts} attempts failed.")
+                raise  # Re-raise the exception after all retries are exhausted
+            sleep_time = delay * (2 ** attempt if exponential_backoff else 1) + random.uniform(0, 0.1)
+            time.sleep(sleep_time)
+    return None

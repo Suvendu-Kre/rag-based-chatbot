@@ -22,5 +22,6 @@ jobs:
       - name: Deploy to GCP (Placeholder)
         run: |
           echo "Deploying to GCP..."
-          # Add GCP deployment steps here, e.g., using gcloud CLI.
-          echo "Deployment complete."
+          # Add your GCP deployment steps here, e.g., using gcloud CLI
+          # gcloud functions deploy ...
+          echo "Deployment complete!"

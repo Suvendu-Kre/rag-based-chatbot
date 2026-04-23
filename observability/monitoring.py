@@ -3,24 +3,26 @@ import logging
 from functools import wraps
 from typing import Callable, Any
 
-def process_request(func: Callable[..., Any]) -> Callable[..., Any]:
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+def process_request() -> Callable:
     """
-    Decorator for logging request information.
+    Decorator for logging request information.  This version supports async
+    handlers and does not execute the handler during import.
     """
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        start_time = time.time()
-        try:
-            response = await func(*args, **kwargs)
-            status_code = 200  # Assume success if no exception
-            return response
-        except Exception as e:
-            logging.error(f"Error in {func.__name__}: {e}")
-            status_code = 500  # Internal Server Error
-            raise
-        finally:
-            duration = time.time() - start_time
-            logging.info(
-                f"Request to {func.__name__} took {duration:.4f}s and returned status code {status_code}"
-            )
-    return wrapper
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            start_time = time.time()
+            try:
+                response = await func(*args, **kwargs)
+                end_time = time.time()
+                logging.info(f"Request to {func.__name__} completed in {end_time - start_time:.4f} seconds.")
+                return response
+            except Exception as e:
+                end_time = time.time()
+                logging.error(f"Request to {func.__name__} failed in {end_time - start_time:.4f} seconds: {e}")
+                raise
+        return wrapper
+    return decorator

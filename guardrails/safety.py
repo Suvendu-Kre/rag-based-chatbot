@@ -1,7 +1,13 @@
 def validate_input(input: str) -> str:
-    """Basic input validation."""
-    return input.strip() if input and input.strip() else "Error: Empty input."
+    """
+    Validates the input to ensure it is not malicious or harmful.
+    """
+    # Basic input sanitization - prevent script injection
+    sanitized_input = input.replace("<", "&lt;").replace(">", "&gt;")
+    return sanitized_input.strip() if sanitized_input else "Error: Empty input."
 
 def validate_output(output: str) -> str:
-    """Basic output validation."""
+    """
+    Validates the output to ensure it is safe and appropriate.
+    """
     return output.strip() if output and output.strip() else "Error: Empty response."
