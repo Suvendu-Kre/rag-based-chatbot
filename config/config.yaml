@@ -1,0 +1,26 @@
+agent_name: Agent
+agentic_framework: langchain
+llm_provider: google_vertexai
+model: gemini-2.0-flash-001
+security:
+  auth_type: api_key
+  rate_limit: 60
+  encryption: true
+guardrails:
+  content_filtering: true
+  input_validation: true
+  output_validation: true
+error_handling:
+  ai_managed: false
+  retry_attempts: 3
+  retry_strategy: exponential
+  timeout: 30
+  circuit_breaker: false
+observability:
+  logging_level: INFO
+deployment:
+  platform: gcp
+  region: us-central1
+memory:
+  enabled: false
+  type: conversation_history
