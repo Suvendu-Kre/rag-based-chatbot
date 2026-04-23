@@ -15,6 +15,8 @@ jobs:
   deploy:
     name: Deploy & Capture Endpoint
     runs-on: ubuntu-latest
+    env:
+      HAS_GCP_CREDS: ${{ secrets.GCP_CREDENTIALS != '' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -33,13 +35,13 @@ jobs:
 
       - name: Authenticate to Google Cloud
         id: gcp_auth
-        if: ${{ secrets.GCP_CREDENTIALS != '' }}
+        if: env.HAS_GCP_CREDS == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Post Authenticate to Google Cloud
-        if: ${{ secrets.GCP_CREDENTIALS == '' }}
+      - name: Skip Auth Notice
+        if: env.HAS_GCP_CREDS != 'true'
         run: |
           echo "::warning::GCP_CREDENTIALS secret is not configured. Skipping Vertex AI deployment."
           echo "### ⚠️ GCP Credentials Not Configured" >> $GITHUB_STEP_SUMMARY
@@ -56,7 +58,7 @@ jobs:
 
       - name: Deploy to Vertex AI
         id: deploy
-        if: ${{ secrets.GCP_CREDENTIALS != '' }}
+        if: env.HAS_GCP_CREDS == 'true'
         run: |
           # Look for the GCP deployment script
           DEPLOY_SCRIPT=$(find . -name "deploy.py" -path "*/gcp/*" | head -n 1)
@@ -126,12 +128,9 @@ jobs:
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
           GOOGLE_CLOUD_STAGING_BUCKET: ${{ secrets.GOOGLE_CLOUD_STAGING_BUCKET }}
 
-      - name: Post Setup Python
-        if: ${{ secrets.GCP_CREDENTIALS == '' }}
+      - name: Skip Deploy Notice
+        if: env.HAS_GCP_CREDS != 'true'
         run: echo "Skipped Vertex AI deployment — GCP credentials not configured."
-
-      - name: Post Checkout Code
-        run: echo "Code checked out successfully."
 
       - name: Upload Deployment Logs
         uses: actions/upload-artifact@v4
