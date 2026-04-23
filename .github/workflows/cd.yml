@@ -7,6 +7,10 @@ on:
       - master
   workflow_dispatch:
 
+# Opt into Node.js 24 to avoid the Node.js 20 deprecation warnings
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     name: Deploy & Capture Endpoint
@@ -28,12 +32,31 @@ jobs:
           pip install google-cloud-aiplatform[agent_engines] google-cloud-storage
 
       - name: Authenticate to Google Cloud
+        id: gcp_auth
+        if: ${{ secrets.GCP_CREDENTIALS != '' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
+      - name: Post Authenticate to Google Cloud
+        if: ${{ secrets.GCP_CREDENTIALS == '' }}
+        run: |
+          echo "::warning::GCP_CREDENTIALS secret is not configured. Skipping Vertex AI deployment."
+          echo "### ⚠️ GCP Credentials Not Configured" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The **GCP_CREDENTIALS** secret is not set in this repository." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**To fix this:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to **KRE Platform → Settings → Google Cloud**" >> $GITHUB_STEP_SUMMARY
+          echo "2. Paste your GCP service account key JSON" >> $GITHUB_STEP_SUMMARY
+          echo "3. Re-deploy the agent — the key will be set as a GitHub secret automatically" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Your agent code has been pushed to GitHub successfully." >> $GITHUB_STEP_SUMMARY
+          echo "The Cloud Run deployment (if enabled) happens directly from the KRE platform and does not require this secret." >> $GITHUB_STEP_SUMMARY
+
       - name: Deploy to Vertex AI
         id: deploy
+        if: ${{ secrets.GCP_CREDENTIALS != '' }}
         run: |
           # Look for the GCP deployment script
           DEPLOY_SCRIPT=$(find . -name "deploy.py" -path "*/gcp/*" | head -n 1)
@@ -102,7 +125,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
           GOOGLE_CLOUD_STAGING_BUCKET: ${{ secrets.GOOGLE_CLOUD_STAGING_BUCKET }}
-          
+
+      - name: Post Setup Python
+        if: ${{ secrets.GCP_CREDENTIALS == '' }}
+        run: echo "Skipped Vertex AI deployment — GCP credentials not configured."
+
+      - name: Post Checkout Code
+        run: echo "Code checked out successfully."
+
       - name: Upload Deployment Logs
         uses: actions/upload-artifact@v4
         if: always()
@@ -110,3 +140,6 @@ jobs:
           name: deployment-logs
           path: deploy_output.txt
           if-no-files-found: ignore
+
+      - name: Complete job
+        run: echo "CD pipeline complete."
