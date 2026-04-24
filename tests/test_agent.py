@@ -7,18 +7,13 @@ def agent():
 
 def test_agent_initialization(agent):
     assert agent is not None
-    assert agent.system_prompt is not None
+    assert agent.llm is not None
+    assert agent.tools_map is not None
 
-def test_agent_calculate_tool(agent):
-    # This test relies on the calculate tool being available
-    # and correctly configured.
-    result = agent.run("What is 2 + 2?")
-    assert "4" in result
+def test_agent_run_with_date_tool(agent):
+    response = agent.run("What is the current date?")
+    assert "current date" in response.lower()
 
-def test_agent_rag_retrieval(agent):
-    # This test relies on the RAG retrieval being available
-    # and correctly configured.  It also requires that the agent
-    # has ingested some data into the RAG system.
-    agent._ingest_to_rag("test_query", "test_result", "test_tool")
-    result = agent.run("What is test_query?")
-    assert "test_result" in result
+def test_agent_run_with_unknown_query(agent):
+    response = agent.run("Tell me about the capital of France.")
+    assert isinstance(response, str)

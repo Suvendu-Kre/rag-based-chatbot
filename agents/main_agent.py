@@ -9,7 +9,7 @@ class Agent:
         self.llm = ChatVertexAI(model_name="gemini-2.0-flash-001", project="gen-ai-poc-onboarding", location="us-central1")
         self.tools_map = {t.name: t for t in self._get_tools()}
         self.llm_with_tools = self.llm.bind_tools(list(self.tools_map.values()))
-        self.system_prompt = """You are a helpful AI agent called "RAG Based Chatbot". You answer questions using retrieved information from a knowledge base, providing accurate and contextually relevant responses. You leverage retrieval-augmented generation to ground your answers in reliable sources. Your RAG pipeline uses sentence splitter chunks, BGEM3 embeddings, FAISS index and QdrantDB."""
+        self.system_prompt = """You are a helpful AI agent. Your primary function is to assist users by leveraging a knowledge base to provide accurate and contextually relevant answers. You combine retrieval-augmented generation with conversational AI for enhanced knowledge-driven interactions. You use BGE-M3 embeddings, FAISS index, and Qdrant vector DB for RAG. You use sentence-level chunking (200-500 tokens, 20-50 overlap). You use FAISS for fast shortlist and Qdrant for persistent storage."""
         self._faiss_index = None
         self._faiss_docs: list = []
         self._embedder = None
@@ -77,68 +77,61 @@ class Agent:
             from qdrant_client import QdrantClient
             from qdrant_client.models import Filter, FieldCondition, Range
             import os
-
             if self._embedder is None:
                 self._embedder = SentenceTransformer('BAAI/bge-m3')
-            query_embedding = self._embedder.encode(query, normalize_embeddings=True)
 
-            # FAISS retrieval
+            query_embedding = self._embedder.encode(query, normalize_embeddings=True)
+            # FAISS search (fast shortlist)
             if self._faiss_index is None:
                 return []
+            distances, indices = self._faiss_index.search(np.array([query_embedding], dtype='float32'), k=2 * top_k)
+            candidate_chunks = [self._faiss_docs[i] for i in indices[0]]
 
-            distances, indices = self._faiss_index.search(np.array([query_embedding], dtype='float32'), k=2 * top_k)  # shortlist
-            faiss_candidates = [self._faiss_docs[i] for i in indices[0] if i < len(self._faiss_docs)]
-
-            # Qdrant retrieval
+            # Qdrant search (persistent confirmation)
             qdrant_url = os.environ.get('QDRANT_URL', 'http://localhost:6333')
             qdrant_key = os.environ.get('QDRANT_API_KEY', '')
             qc = QdrantClient(url=qdrant_url, api_key=qdrant_key or None)
             _COL = 'knowledge_base'
-            qdrant_results = qc.search(
+            search_result = qc.search(
                 collection_name=_COL,
                 query_vector=query_embedding.tolist(),
                 limit=top_k,
-                query_filter=None  # Add filters if needed
+                query_filter=Filter(
+                    must=[FieldCondition(key="text", range=Range(gte=1))]
+                )
             )
+            qdrant_chunks = [hit.payload['text'] for hit in search_result]
 
-            qdrant_texts = [hit.payload['text'] for hit in qdrant_results]
+            # Combine and deduplicate results, prioritizing Qdrant
+            retrieved_chunks = list(dict.fromkeys(qdrant_chunks + candidate_chunks))  # Preserve order
 
-            # Combine and deduplicate (Qdrant is authoritative)
-            combined_results = list(dict.fromkeys(qdrant_texts + faiss_candidates))
-            return combined_results[:top_k]
+            return retrieved_chunks[:top_k]  # Return top_k
 
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f'RAG retrieval failed: {e}')
+            import logging; logging.getLogger(__name__).warning(f'RAG retrieval failed: {e}')
             return []
 
     def run(self, message: str) -> str:
-        retrieved_chunks = self._retrieve_from_rag(message)
-        context = "\n".join(retrieved_chunks)
+        # Retrieve context from RAG
+        context = self._retrieve_from_rag(message)
+        context_str = "\n".join(context)
 
         messages = [
-            SystemMessage(content=self.system_prompt + f"\n\nContext from knowledge base:\n{context}"),
+            SystemMessage(content=self.system_prompt + f"\n\nRelevant context:\n{context_str}"),
             HumanMessage(content=message),
         ]
         # Agentic loop: keep calling LLM until no more tool calls
         for _ in range(3):  # max iterations to prevent infinite loops
-            try:
-                response = self.llm_with_tools.invoke(messages)
-                messages.append(response)
-                if not response.tool_calls:
-                    break
-                # Execute each tool call and feed results back
-                for tc in response.tool_calls:
-                    fn = self.tools_map.get(tc["name"])
-                    tool_result = fn.invoke(tc["args"]) if fn else f"Unknown tool: {tc['name']}"
-                    messages.append(ToolMessage(content=str(tool_result), tool_call_id=tc["id"]))
-                    self._ingest_to_rag(message, str(tool_result), tc["name"]) # Ingest tool results
-                
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"LLM call failed: {e}")
-                return "Error: Failed to generate response from LLM."
-
+            response = self.llm_with_tools.invoke(messages)
+            messages.append(response)
+            if not response.tool_calls:
+                break
+            # Execute each tool call and feed results back
+            for tc in response.tool_calls:
+                fn = self.tools_map.get(tc["name"])
+                tool_result = fn.invoke(tc["args"]) if fn else f"Unknown tool: {tc['name']}"
+                messages.append(ToolMessage(content=str(tool_result), tool_call_id=tc["id"]))
+                self._ingest_to_rag(message, str(tool_result), tc["name"]) # Ingest data after tool call
         return response.content if hasattr(response, "content") else str(response)
 
     async def chat(self, message: str) -> str:

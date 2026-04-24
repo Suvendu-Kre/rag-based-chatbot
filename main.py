@@ -4,9 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from agents.main_agent import Agent
+from agents.main_agent import Agent  # Import your Agent class
 from observability.monitoring import process_request
-from guardrails.safety import validate_input, validate_output
 
 _START_TIME = time.time()
 _REQUEST_COUNT = 0
@@ -17,7 +16,7 @@ app = FastAPI(title=_AGENT_NAME)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
-agent = Agent()
+agent = Agent()  # Instantiate your agent
 
 class ChatRequest(BaseModel):
     message: str
@@ -28,45 +27,41 @@ class RunRequest(BaseModel):
     context: Optional[Dict[str, Any]] = {}
 
 @app.get("/health")
-@process_request()
-async def health():
+def health():
     return {"status": "ok", "agent": _AGENT_NAME, "version": _AGENT_VERSION,
             "timestamp": datetime.utcnow().isoformat() + "Z"}
 
 @app.post("/chat")
-@process_request()
+@process_request
 async def chat(req: ChatRequest):
     global _REQUEST_COUNT
     _REQUEST_COUNT += 1
     session_id = req.session_id or str(uuid.uuid4())
-    message = validate_input(req.message)
-    response = await agent.chat(message)
-    response = validate_output(response)
+    # Call your agent's chat method here:
+    response = await agent.chat(req.message)   # replace with actual agent call
     return {"response": response, "session_id": session_id}
 
 @app.post("/run")
-@process_request()
+@process_request
 async def run(req: RunRequest):
     global _REQUEST_COUNT
     _REQUEST_COUNT += 1
     task_id = str(uuid.uuid4())
-    input = validate_input(req.input)
-    result = await agent.chat(input)
-    result = validate_output(result)
+    # Execute the agent task with the provided input and context:
+    result = await agent.chat(req.input)       # replace with actual agent call
     return {"ok": True, "task_id": task_id, "result": result,
             "input": req.input, "completed_at": datetime.utcnow().isoformat() + "Z"}
 
 @app.get("/info")
-@process_request()
 def info():
     from tools.tool_manager import get_tools
     tools = [tool.__name__ for tool in get_tools()]
     return {
         "name": _AGENT_NAME,
         "version": _AGENT_VERSION,
-        "description": "AI agent powered by the KRE platform. RAG Based Chatbot answers questions using retrieved information from a knowledge base, providing accurate and contextually relevant responses. It leverages retrieval-augmented generation to ground its answers in reliable sources.",
+        "description": "AI agent powered by the KRE platform",
         "capabilities": ["chat", "task_execution", "rag", "tool_use"],
-        "tools": tools,
+        "tools": tools,   # populate with real tool names from tool_manager
         "endpoints": [
             {"method": "GET",  "path": "/health", "description": "Liveness check"},
             {"method": "POST", "path": "/chat",   "description": "Chat with the agent"},
@@ -78,7 +73,6 @@ def info():
     }
 
 @app.get("/status")
-@process_request()
 def status():
     uptime = time.time() - _START_TIME
     try:

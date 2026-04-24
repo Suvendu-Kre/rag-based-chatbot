@@ -5,23 +5,26 @@ model: gemini-2.0-flash-001
 security:
   auth_type: api_key
   rate_limit: 60
-  encryption: True
-content_filtering: True
+  encryption: true
+content_filtering: true
 model_armor:
-  enabled: False
-  prompt_injection_detection: False
-  jailbreak_detection: False
-  toxic_content_filter: False
-  pii_detection: False
+  enabled: false
+  prompt_injection_detection: false
+  jailbreak_detection: false
+  toxic_content_filter: false
+  pii_detection: false
 error_handling:
-  ai_managed: False
+  ai_managed: false
   retry_attempts: 3
   retry_strategy: exponential
   timeout: 30
-  circuit_breaker: False
-input_validation: True
-output_validation: True
+  circuit_breaker: false
+input_validation: true
+output_validation: true
+checkpoints: {}
 validation_mode: strict
-explainability: True
-deployment_platform: gcp
-region: us-central1
+failure_handling: {}
+explainability: true
+deployment:
+  platform: gcp
+  region: us-central1

@@ -1,32 +1,31 @@
 import time
-import random
 import logging
-from typing import Callable, Any
+from functools import wraps
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def retry(func: Callable, attempts: int = 3, delay: float = 1.0, exponential_backoff: bool = True) -> Any:
-    """
-    Retry a function with exponential backoff.
+def retry(attempts=3, delay=1, exponential_backoff=True):
+    """Retry decorator with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            attempt = 0
+            while attempt < attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempt += 1
+                    if attempt == attempts:
+                        logging.error(f"Function {func.__name__} failed after {attempts} attempts: {e}")
+                        raise
+                    wait_time = delay * (2 ** (attempt - 1) if exponential_backoff else 1)
+                    logging.warning(f"Retrying {func.__name__} in {wait_time} seconds...")
+                    time.sleep(wait_time)
+        return wrapper
+    return decorator
 
-    Args:
-        func: The function to retry.
-        attempts: The maximum number of attempts.
-        delay: The initial delay in seconds.
-        exponential_backoff: Whether to use exponential backoff.
-
-    Returns:
-        The result of the function if successful, or None if all attempts fail.
-    """
-    for attempt in range(attempts):
-        try:
-            return func()
-        except Exception as e:
-            logging.warning(f"Attempt {attempt + 1} failed: {e}")
-            if attempt == attempts - 1:
-                logging.error(f"All {attempts} attempts failed.")
-                raise  # Re-raise the exception after all retries are exhausted
-            sleep_time = delay * (2 ** attempt if exponential_backoff else 1) + random.uniform(0, 0.1)
-            time.sleep(sleep_time)
-    return None
+# Example usage:
+# @retry(attempts=3, delay=1, exponential_backoff=True)
+# def my_function():
+#     # Function that might fail
+#     pass

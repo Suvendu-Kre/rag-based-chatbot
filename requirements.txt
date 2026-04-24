@@ -5,9 +5,9 @@ pydantic
 langchain-core
 langchain-google-vertexai
 google-cloud-aiplatform
+psutil
 sentence-transformers>=2.7.0
 faiss-cpu>=1.7.4
 qdrant-client>=1.9.0
 numpy>=1.24.0
-psutil
 python-dotenv

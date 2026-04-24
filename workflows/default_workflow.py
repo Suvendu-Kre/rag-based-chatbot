@@ -1,8 +1,7 @@
-# Placeholder for workflow definitions.  Currently, the agent runs a simple
-# loop in agents/main_agent.py, but more complex workflows could be defined here.
-
+# Placeholder for workflow logic.  Currently, the agent runs a simple loop.
 async def run_workflow(input: str, context: dict) -> str:
     """
-    Placeholder for a more complex workflow.  Currently, this just returns the input.
+    Executes the default agent workflow.
     """
+    # In this example, the workflow simply returns the input.
     return input
